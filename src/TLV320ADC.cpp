@@ -1,5 +1,6 @@
 
 #include "TLV320ADC.h"
+#include "TLV320ADC_REG.h"
 
 TLV320ADC::TLV320ADC()
 {
@@ -7,8 +8,7 @@ TLV320ADC::TLV320ADC()
     _currentPage = 0;
 }
 
-bool TLV320ADC::begin(uint8_t sda, uint8_t scl) {
-    Wire.begin(sda, scl);
+bool TLV320ADC::begin(uint8_t address = TLV320ADC_I2C_ADDR, TwoWire &wirePort = Wire) {
     _initialized = true;
     return true;
 }
@@ -45,11 +45,9 @@ void TLV320ADC::setBit(uint8_t reg, uint8_t bit, bool value)
     writeRegister(reg, regValue);
 }
 
-#include "TLV320ADC.h"
-
 uint8_t TLV320ADC::getChannelBaseRegister(uint8_t channel)
 {
-    return CH1_CFG0_REG + (channel * 5); // Each channel has 5 configuration registers
+    return ADCX140_CH1_CFG0 + (channel * 5); // Each channel has 5 configuration registers
 }
 
 void TLV320ADC::setInputType(uint8_t channel, InputType type)

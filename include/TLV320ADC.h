@@ -40,6 +40,14 @@ enum InputImpedance
     IMP_20K = 2
 };
 
+enum VrefQuickCharge
+{
+    VREFCHG_3_MS = 0,
+    VREFCHG_10_MS = 1,
+    VREFCHG_50_MS = 2,
+    VREFCHG_100_MS = 3
+};
+
 // ASI Format options
 enum ASIFormat
 {
@@ -145,7 +153,11 @@ class TLV320ADC
 {
 public:
     TLV320ADC();
-    bool begin(uint8_t sda = SDA, uint8_t scl = SCL);
+    bool begin(uint8_t address = TLV320ADC_I2C_ADDR, TwoWire &wirePort = Wire);
+
+    void sleep(bool enable);
+    void setPage(uint8_t page);
+    void reset();
 
 
     // Channel configuration methods
@@ -225,6 +237,7 @@ private:
     void setBit(uint8_t reg, uint8_t bit, bool value);
     uint8_t getChannelBaseRegister(uint8_t channel);
     uint8_t _currentPage;
+    bool _initialized;
     void configureASI0Register(uint8_t value);
     void configureASI1Register(uint8_t value);
     void configureASI2Register(uint8_t value);
