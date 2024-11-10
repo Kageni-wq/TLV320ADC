@@ -8,8 +8,15 @@ TLV320ADC::TLV320ADC()
     _currentPage = 0;
 }
 
-bool TLV320ADC::begin(uint8_t address = TLV320ADC_I2C_ADDR, TwoWire &wirePort = Wire) {
+/************************************************************************************************************Low Level Functions***************************************************************************************************/
+
+bool TLV320ADC::begin(uint8_t address, TwoWire &wirePort) {
     _initialized = true;
+    reset();
+    delay(100);
+    SleepCFG();
+    setPage(0);
+    AutoCFG();
     return true;
 }
 
@@ -45,52 +52,6 @@ void TLV320ADC::setBit(uint8_t reg, uint8_t bit, bool value)
     writeRegister(reg, regValue);
 }
 
-uint8_t TLV320ADC::getChannelBaseRegister(uint8_t channel)
-{
-    return ADCX140_CH1_CFG0 + (channel * 5); // Each channel has 5 configuration registers
-}
-
-void TLV320ADC::setInputType(uint8_t channel, InputType type)
-{
-    uint8_t reg = getChannelBaseRegister(channel);
-    setBit(reg, 7, type);
-}
-
-void TLV320ADC::setInputSource(uint8_t channel, InputSource source)
-{
-    uint8_t reg = getChannelBaseRegister(channel);
-    uint8_t value = readRegister(reg);
-    value &= ~(0b11 << 5);  // Clear bits 6-5
-    value |= (source << 5); // Set new source
-    writeRegister(reg, value);
-}
-
-void TLV320ADC::setChannelGain(uint8_t channel, int8_t gain, bool isNegative)
-{
-    uint8_t reg = getChannelBaseRegister(channel) + 1; // CFG1 register
-    uint8_t gainValue = abs(gain * 2);                 // Convert to 0.5dB steps
-    if (gainValue > 84)
-        gainValue = 84; // Maximum 42dB
-
-    uint8_t value = (gainValue << 1) | (isNegative ? 1 : 0);
-    writeRegister(reg, value);
-}
-
-void TLV320ADC::setDigitalVolume(uint8_t channel, float volume)
-{
-    uint8_t reg = getChannelBaseRegister(channel) + 2; // CFG2 register
-    uint8_t volValue;
-
-    if (volume <= -100.0)
-        volValue = 1;
-    else if (volume >= 27.0)
-        volValue = 255;
-    else
-        volValue = (volume + 100) * 2; // Convert to 0.5dB steps offset
-
-    writeRegister(reg, volValue);
-}
-
 void TLV320ADC::setPage(uint8_t page)
 {
     writeRegister(ADCX140_PAGE_SELECT, page);
@@ -101,99 +62,20 @@ void TLV320ADC::reset()
 {
     writeRegister(ADCX140_SW_RESET, 0x01);
     _currentPage = 0;
+    _sleepConfig.awake = false;
+    _powerConfig.PoweredUp = false;
 }
 
 void TLV320ADC::sleep(bool enable)
 {
     setBit(ADCX140_SLEEP_CFG, 0, !enable); // SLEEP_ENZ is active low
+    _sleepConfig.awake = !enable;
 }
 
-void TLV320ADC::setAnalogSupply(bool useInternalRegulator)
-{
-    setBit(ADCX140_SLEEP_CFG, 7, useInternalRegulator);
-}
 
-void TLV320ADC::setVrefQuickCharge(VrefQuickCharge duration)
+uint8_t TLV320ADC::getChannelBaseRegister(uint8_t channel)
 {
-    uint8_t value = readRegister(ADCX140_SLEEP_CFG);
-    value &= ~(0b11 << 3); // Clear VREF_QCHG bits
-    value |= (duration << 3);
-    writeRegister(ADCX140_SLEEP_CFG, value);
-}
-
-void TLV320ADC::setInputCapQuickCharge(InputCapQuickCharge duration)
-{
-    uint8_t value = readRegister(ADCX140_SHDN_CFG);
-    value &= ~(0b11 << 4); // Clear INCAP_QCHG bits
-    value |= (duration << 4);
-    writeRegister(ADCX140_SHDN_CFG, value);
-}
-
-void TLV320ADC::enableI2CBroadcast(bool enable)
-{
-    setBit(ADCX140_SLEEP_CFG, 2, enable);
-}
-
-void TLV320ADC::setASIFormat(ASIFormat format)
-{
-    uint8_t reg = readRegister(ADCX140_ASI_CFG0);
-    reg &= ~(0b11 << 6);
-    reg |= (format << 6);
-    writeRegister(ADCX140_ASI_CFG0, reg);
-}
-
-void TLV320ADC::setWordLength(ASIWordLength length)
-{
-    uint8_t reg = readRegister(ADCX140_ASI_CFG0);
-    reg &= ~(0b11 << 4);
-    reg |= (length << 4);
-    writeRegister(ADCX140_ASI_CFG0, reg);
-}
-
-void TLV320ADC::setFSYNCPolarity(bool invert)
-{
-    setBit(ADCX140_ASI_CFG0, 3, invert);
-}
-
-void TLV320ADC::setBCLKPolarity(bool invert)
-{
-    setBit(ADCX140_ASI_CFG0, 2, invert);
-}
-
-void TLV320ADC::setTXEdge(bool invert)
-{
-    setBit(ADCX140_ASI_CFG0, 1, invert);
-}
-
-void TLV320ADC::setTXFill(bool hiZ)
-{
-    setBit(ADCX140_ASI_CFG0, 0, hiZ);
-}
-
-void TLV320ADC::setTXOffset(uint8_t offset)
-{
-    if (offset > 31)
-        offset = 31;
-    uint8_t reg = readRegister(ADCX140_ASI_CFG1);
-    reg &= ~0x1F; // Clear lower 5 bits
-    reg |= offset;
-    writeRegister(ADCX140_ASI_CFG1, reg);
-}
-
-void TLV320ADC::setASIMixing(ASIMixSelection mixMode)
-{
-    uint8_t reg = readRegister(ADCX140_ASI_MIX_CFG);
-    reg &= ~(0b11 << 6);
-    reg |= (mixMode << 6);
-    writeRegister(ADCX140_ASI_MIX_CFG, reg);
-}
-
-void TLV320ADC::setASIInputGain(ASIInputGain gain)
-{
-    uint8_t reg = readRegister(ADCX140_ASI_MIX_CFG);
-    reg &= ~(0b11 << 4);
-    reg |= (gain << 4);
-    writeRegister(ADCX140_ASI_MIX_CFG, reg);
+    return ADCX140_CH1_CFG0 + (channel * 5); // Each channel has 5 configuration registers
 }
 
 uint8_t TLV320ADC::getASIChannelRegister(uint8_t channel)
@@ -201,146 +83,116 @@ uint8_t TLV320ADC::getASIChannelRegister(uint8_t channel)
     return ADCX140_ASI_CH1 + channel; // Registers are sequential
 }
 
-void TLV320ADC::setChannelSlot(uint8_t channel, uint8_t slot)
-{
-    if (slot > 63)
-        slot = 63; // Maximum slot value is 63
-    uint8_t reg = getASIChannelRegister(channel);
-    writeRegister(reg, slot & 0x3F); // Write only the lower 6 bits
+/************************************************************************************************************High Level Functions***************************************************************************************************/
+
+
+
+int TLV320ADC::SleepCFG(){
+    #ifdef I2C_PIN_ENABLED
+    _sleepConfig.I2C_Address_Swap_Enabled = true;
+    #endif
+    
+    if(_initialized == false) return MUST_BE_INITIALIZED;
+    if(_sleepConfig.awake == true) return ALREADY_AWAKE;
+
+    uint8_t Cfg = 0x00;
+    Cfg = (_sleepConfig.AR_Supply << 7) | (_sleepConfig.Vref << 3) | (_sleepConfig.I2C_Address_Swap_Enabled << 2) | (_sleepConfig.awake << 0);
+    writeRegister(ADCX140_SLEEP_CFG, Cfg);
+    _sleepConfig.awake = true;
+    return SUCCESS;
 }
 
-void TLV320ADC::setMicBias(MicBiasValue biasValue)
-{
-    uint8_t reg = readRegister(ADCX140_BIAS_CFG);
-    reg &= ~(0x07 << 4); // Clear MBIAS_VAL bits
-    reg |= (biasValue << 4);
-    writeRegister(ADCX140_BIAS_CFG, reg);
+int TLV320ADC::EnableInputChannel(uint8_t channel) {
+    if(channel > 3) return INVALID_CHANNEL;
+    if(_sleepConfig.awake == false) return MUST_BE_AWAKE;
+    if(_initialized == false) return MUST_BE_INITIALIZED;
+    if(_powerConfig.PoweredUp == true) return MUST_BE_POWERED_DOWN;
+    if(_inputChannels[channel].enabled == true) return ALREADY_ENABLED;
+    
+    InputChannelCFG& cfg = _inputChannels[channel];
+    uint8_t baseReg = getChannelBaseRegister(channel);
+    
+    // CFG0: MIC_INPUT, ANALOG_DIFFERENTIAL by default
+    uint8_t cfg0 = 0x00;
+    cfg0 = (cfg.type << 7) | (cfg.source << 5) | (cfg.coupling << 4) | (cfg.impedance << 2);
+    writeRegister(baseReg, cfg0);
+    
+    // CFG1: Input Gain, 0dB by default
+    uint8_t cfg1 = 0x00;
+    if(cfg.gain_db > MAX_INPUT_GAIN) return -2;
+    uint8_t DB_Conversion = (cfg.gain_db * 2);
+    cfg1 = (DB_Conversion << 1) | (cfg.gain_sign << 0);
+    writeRegister(baseReg + 1, cfg1);
+
+    // CFG2: Digital volume, 0dB by default
+    if(cfg.DigitalVolume > MAX_INPUT_VOLUME) return -3;
+    uint8_t cfg2 = cfg.DigitalVolume;
+    writeRegister(baseReg + 2, cfg2);
+    
+    // Enable channel with fresh register value
+    uint8_t enableMask = (1 << (7 - channel));
+    writeRegister(ADCX140_IN_CH_EN, enableMask);
+    
+    cfg.enabled = true;
+    return SUCCESS;
 }
 
-void TLV320ADC::setADCFullScale(ADCFullScale scale)
-{
-    uint8_t reg = readRegister(ADCX140_BIAS_CFG);
-    reg &= ~0x03; // Clear ADC_FSCALE bits
-    reg |= scale;
-    writeRegister(ADCX140_BIAS_CFG, reg);
+int TLV320ADC::EnableOutputChannel(uint8_t channel) {
+    if(channel > 3) return INVALID_CHANNEL;
+    if(_sleepConfig.awake == false) return MUST_BE_AWAKE;
+    if(_initialized == false) return MUST_BE_INITIALIZED;
+    if(_powerConfig.PoweredUp == true) return MUST_BE_POWERED_DOWN;
+    if(_outputChannels[channel].enabled == true) return ALREADY_ENABLED;
+    
+    // Set Channel Slot 
+    uint8_t asiChCfg = channel;
+    asiChCfg = _outputChannels[channel].slot;
+    writeRegister(getASIChannelRegister(channel), asiChCfg);
+    
+    // Enable output channel with fresh register value
+    uint8_t enableMask = (1 << (7 - channel));
+    writeRegister(ADCX140_ASI_OUT_CH_EN, enableMask);
+    
+    _outputChannels[channel].enabled = true;
+
+    return SUCCESS;
 }
 
-void TLV320ADC::setDigitalVolumeRuntime(bool enable)
-{
-    setBit(ADCX140_DSP_CFG0, 7, !enable);
+int TLV320ADC::PowerUp() {
+    if(_initialized == false) return MUST_BE_INITIALIZED;
+    if(_sleepConfig.awake == false) return MUST_BE_AWAKE;
+    if(_powerConfig.PoweredUp == true) return ALREADY_POWERED_UP;
+    
+    uint8_t pwrCfg = (_powerConfig.MicBias << 7) | (_powerConfig.ADC << 6) | (_powerConfig.PLL << 5) | (_powerConfig.DynamicCHPwr << 4) | (_powerConfig.DynamicCHs << 3); // MicBias, ADC, PLL bits
+    writeRegister(ADCX140_PWR_CFG, pwrCfg);
+
+    _powerConfig.PoweredUp = true;
+    return SUCCESS;
 }
 
-void TLV320ADC::setDecimationFilter(DecimationFilter filter)
+void TLV320ADC::AutoCFG()
 {
-    uint8_t reg = readRegister(ADCX140_DSP_CFG0);
-    reg &= ~(0x03 << 4);
-    reg |= (filter << 4);
-    writeRegister(ADCX140_DSP_CFG0, reg);
-}
+    // ASI_CFG0: I2S_MODE, BITS_32 by default
+    uint8_t asiCfg0 = 0x30;
+    asiCfg0 = (_asiConfig.format << 6) | (_asiConfig.wordLength << 4);
+    writeRegister(ADCX140_ASI_CFG0, asiCfg0);
 
-void TLV320ADC::setChannelSummation(ChannelSum mode)
-{
-    uint8_t reg = readRegister(ADCX140_DSP_CFG0);
-    reg &= ~(0x03 << 2);
-    reg |= (mode << 2);
-    writeRegister(ADCX140_DSP_CFG0, reg);
-}
+    // ASI_CFG1: MSB Slot 0 offset, 0 by default
+    uint8_t asiCfg1 = 0x00;
+    asiCfg1 = (_asiConfig.offset << 0);
+    writeRegister(ADCX140_ASI_CFG1, asiCfg1);
 
-void TLV320ADC::setHighPassFilter(HPFSelect filter)
-{
-    uint8_t reg = readRegister(ADCX140_DSP_CFG0);
-    reg &= ~0x03;
-    reg |= filter;
-    writeRegister(ADCX140_DSP_CFG0, reg);
-}
+    // ASI_CFG2: MSB Slot 1 offset, 0 by default
+    uint8_t asiCfg2 = 0x00;
+    asiCfg2 = (_asiConfig.DisableASIErrorDetection << 5) | (_asiConfig.DisableASIAutoResume << 4);
+    writeRegister(ADCX140_ASI_CFG2, asiCfg2);
 
-void TLV320ADC::setVolumeGanging(bool enable)
-{
-    setBit(ADCX140_DSP_CFG1, 7, enable);
-}
+    uint8_t asiMixCfg = 0x00;
+    asiMixCfg = (_asiConfig.mixSelection << 6) | (_asiConfig.inputGain << 4);
+    writeRegister(ADCX140_ASI_MIX_CFG, asiMixCfg);
 
-void TLV320ADC::setBiquadConfig(BiquadConfig config)
-{
-    uint8_t reg = readRegister(ADCX140_DSP_CFG1);
-    reg &= ~(0x03 << 5);
-    reg |= (config << 5);
-    writeRegister(ADCX140_DSP_CFG1, reg);
-}
-
-void TLV320ADC::setSoftStepping(bool enable)
-{
-    setBit(ADCX140_DSP_CFG1, 4, !enable);
-}
-
-void TLV320ADC::setAGC(bool enable)
-{
-    setBit(ADCX140_DSP_CFG1, 3, enable);
-}
-
-void TLV320ADC::setAntiClipper(bool enable)
-{
-    setBit(ADCX140_DSP_CFG1, 0, enable);
-}
-
-void TLV320ADC::enableInputChannel(uint8_t channel, bool enable)
-{
-    if (channel > 3)
-        return; // Only channels 0-3 are valid
-    setBit(ADCX140_IN_CH_EN, 7 - channel, enable);
-}
-
-void TLV320ADC::enableASIOutputChannel(uint8_t channel, bool enable)
-{
-    if (channel > 3)
-        return; // Only channels 0-3 are valid
-    setBit(ADCX140_ASI_OUT_CH_EN, 7 - channel, enable);
-}
-
-void TLV320ADC::enableMicBias(bool enable)
-{
-    setBit(ADCX140_PWR_CFG, 7, enable);
-}
-
-void TLV320ADC::enableADC(bool enable)
-{
-    setBit(ADCX140_PWR_CFG, 6, enable);
-}
-
-void TLV320ADC::enablePLL(bool enable)
-{
-    setBit(ADCX140_PWR_CFG, 5, enable);
-}
-
-void TLV320ADC::enableDynamicChannelPower(bool enable)
-{
-    setBit(ADCX140_PWR_CFG, 4, enable);
-}
-
-void TLV320ADC::setDynamicMaxChannels(DynamicMaxChannel config)
-{
-    uint8_t reg = readRegister(ADCX140_PWR_CFG);
-    reg &= ~(0x03 << 2); // Clear DYN_MAXCH_SEL bits
-    reg |= (config << 2);
-    writeRegister(ADCX140_PWR_CFG, reg);
-}
-
-void TLV320ADC::enableVAD(bool enable)
-{
-    setBit(ADCX140_PWR_CFG, 0, enable);
-}
-
-bool TLV320ADC::isChannel1PoweredUp()
-{
-    return (readRegister(ADCX140_DEV_STS0) & (1 << 7)) != 0;
-}
-
-bool TLV320ADC::isChannel2PoweredUp()
-{
-    return (readRegister(ADCX140_DEV_STS0) & (1 << 6)) != 0;
-}
-
-DeviceMode TLV320ADC::getDeviceMode()
-{
-    uint8_t mode = (readRegister(ADCX140_DEV_STS1) >> 5) & 0x07;
-    return static_cast<DeviceMode>(mode);
+    // Master Mode Congifuration 
+    uint8_t masterCfg0 = 0x02;
+    masterCfg0 = (_asiConfig.MasterMode << 7);
+    writeRegister(ADCX140_MST_CFG1, masterCfg0);
 }

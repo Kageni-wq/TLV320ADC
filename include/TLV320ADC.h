@@ -3,150 +3,67 @@
 
 #include <Arduino.h>
 #include <Wire.h>
+#include "TLV320ADC_REG.h"
+#include "TLV320ADC_ENUM.h"
 
 #ifdef I2C_PIN_ENABLED
 #define TLV320ADC_I2C_ADDR (0x4c)
 #else
-#define TLV320ADC_I2C_ADDR (0x9c)
+#define TLV320ADC_I2C_ADDR (0x4e)
 #endif
 
-// Input type options
-enum InputType
+#define MAX_INPUT_GAIN 42
+#define MAX_INPUT_VOLUME 255
+
+struct SleepConfig
 {
-    MIC_INPUT = 0,
-    LINE_INPUT = 1
+    bool awake = false;
+    bool shutdown = false;
+    Areg_Supply_Voltage AR_Supply = Internal_1_8V;
+    VrefQuickCharge Vref = VREF_QCHG_3_5MS;
+    bool I2C_Address_Swap_Enabled = false;
 };
 
-// Input source configuration
-enum InputSource
+struct InputChannelCFG
 {
-    ANALOG_DIFFERENTIAL = 0,
-    ANALOG_SINGLE_ENDED = 1,
-    DIGITAL_PDM = 2
+    InputImpedance impedance = IMP_2_5K;
+    InputCoupling coupling = AC_COUPLED;
+    InputSource source = ANALOG_DIFFERENTIAL;
+    InputType type = MIC_INPUT;
+    bool AGC_enabled = false;
+    uint8_t gain_db = 42;
+    InputGainSign gain_sign = POSITIVE;
+    uint8_t DigitalVolume = 255;
+    bool enabled = false;
 };
 
-// Input coupling
-enum InputCoupling
+struct ASIConfig
 {
-    AC_COUPLED = 0,
-    DC_COUPLED = 1
+    ASIFormat format = I2S_MODE;
+    bool MasterMode = false;
+    ASIWordLength wordLength = BITS_32;
+    uint8_t offset = 0;
+    ASIMixSelection mixSelection = NO_MIXING;
+    ASIInputGain inputGain = GAIN_0DB;
+    MicBiasValue micBias = VREF;
+    bool DisableASIErrorDetection = false;
+    bool DisableASIAutoResume = false;
 };
 
-// Input impedance
-enum InputImpedance
+struct PowerConfig
 {
-    IMP_2_5K = 0,
-    IMP_10K = 1,
-    IMP_20K = 2
+    bool MicBias = true;
+    bool ADC = true;
+    bool PLL = true;
+    bool DynamicCHPwr = false;
+    uint8_t DynamicCHs = CH1_CH2_ONLY;
+    bool PoweredUp = false;
 };
 
-enum VrefQuickCharge
+struct OutputChannelCFG
 {
-    VREFCHG_3_MS = 0,
-    VREFCHG_10_MS = 1,
-    VREFCHG_50_MS = 2,
-    VREFCHG_100_MS = 3
-};
-
-// ASI Format options
-enum ASIFormat
-{
-    TDM_MODE = 0,
-    I2S_MODE = 1,
-    LEFT_JUSTIFIED = 2
-};
-
-// Word length options
-enum ASIWordLength
-{
-    BITS_16 = 0,
-    BITS_20 = 1,
-    BITS_24 = 2,
-    BITS_32 = 3
-};
-
-// ASI Mix Selection
-enum ASIMixSelection
-{
-    NO_MIXING = 0,
-    MIX_CH1_CH2_TO_SLOT0 = 1,
-    MIX_CH1_CH2_TO_SLOT1 = 2,
-    MIX_BOTH_CHANNELS = 3
-};
-
-// ASI Input Gain
-enum ASIInputGain
-{
-    GAIN_0DB = 0,
-    GAIN_NEG_6DB = 1,
-    GAIN_NEG_12DB = 2,
-    GAIN_NEG_18DB = 3
-};
-
-// Microphone bias value options
-enum MicBiasValue
-{
-    VREF = 0,
-    VREF_X_1_096 = 1,
-    VCM_IN1M = 2,
-    VCM_IN2M = 3,
-    VCM_IN1M_IN2M_AVG = 4,
-    VCM_INTERNAL = 5,
-    AVDD = 6,
-    GPI2 = 7
-};
-
-// ADC full-scale settings
-enum ADCFullScale
-{
-    VREF_2_75V = 0, // 2VRMS differential, 1VRMS single-ended
-    VREF_2_5V = 1,  // 1.818VRMS differential, 0.909VRMS single-ended
-    VREF_1_375V = 2 // 1VRMS differential, 0.5VRMS single-ended
-};
-
-// DSP Configuration enums
-enum DecimationFilter
-{
-    LINEAR_PHASE = 0,
-    LOW_LATENCY = 1,
-    ULTRA_LOW_LATENCY = 2
-};
-
-enum ChannelSum
-{
-    SUM_DISABLED = 0,
-    SUM_CH1_CH2 = 1
-};
-
-enum HPFSelect
-{
-    CUSTOM_IIR = 0,
-    HPF_12HZ = 1,
-    HPF_96HZ = 2,
-    HPF_384HZ = 3
-};
-
-enum BiquadConfig
-{
-    NO_BIQUADS = 0,
-    ONE_BIQUAD = 1,
-    TWO_BIQUADS = 2,
-    THREE_BIQUADS = 3
-};
-
-// Dynamic max channel selection
-enum DynamicMaxChannel
-{
-    CH1_CH2_ONLY = 0,
-    CH1_TO_CH4 = 1
-};
-
-// Device mode status values
-enum DeviceMode
-{
-    SLEEP_OR_SHUTDOWN = 4,
-    ACTIVE_ALL_CHANNELS_OFF = 6,
-    ACTIVE_CHANNELS_ON = 7
+    ChannelSlot slot = L_SLOT_0;
+    bool enabled = false;
 };
 
 class TLV320ADC
@@ -155,10 +72,10 @@ public:
     TLV320ADC();
     bool begin(uint8_t address = TLV320ADC_I2C_ADDR, TwoWire &wirePort = Wire);
 
+    // Basic Device Control
     void sleep(bool enable);
     void setPage(uint8_t page);
     void reset();
-
 
     // Channel configuration methods
     void setInputType(uint8_t channel, InputType type);
@@ -214,9 +131,9 @@ public:
     void setAGC(bool enable);
     void setAntiClipper(bool enable);
 
-    // Channel enable methods
-    void enableInputChannel(uint8_t channel, bool enable);
-    void enableASIOutputChannel(uint8_t channel, bool enable);
+    // Channel Disable methods
+    void DisableInputChannel(uint8_t channel, bool enable);
+    void DisableOutputChannel(uint8_t channel, bool enable);
 
     // Power configuration methods
     void enableMicBias(bool enable);
@@ -231,6 +148,13 @@ public:
     bool isChannel2PoweredUp();
     DeviceMode getDeviceMode();
 
+    // High level Congiguration methods
+    int SleepCFG();
+    int EnableInputChannel(uint8_t channel);
+    int EnableOutputChannel(uint8_t channel);
+    void AutoCFG();
+    int PowerUp();
+
 private:
     void writeRegister(uint8_t reg, uint8_t value);
     uint8_t readRegister(uint8_t reg);
@@ -243,6 +167,12 @@ private:
     void configureASI2Register(uint8_t value);
     void configureASIMixRegister(uint8_t value);
     uint8_t getASIChannelRegister(uint8_t channel);
+    SleepConfig _sleepConfig;            // Store sleep configuration
+    InputChannelCFG _inputChannels[4];   // Array to store channel configs
+    OutputChannelCFG _outputChannels[4]; // Array to store output configs
+    PowerConfig _powerConfig;            // Store power configuration
+    ASIConfig _asiConfig;                // Store ASI configuration
 };
 
 #endif
+
