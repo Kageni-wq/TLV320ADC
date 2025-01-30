@@ -1,12 +1,10 @@
 {
-  "name": "TLV320ADC",
+  "name": "ATCommands",
   "version": "1.0.0",
-  "description": "Arduino library for TI TLV320ADC3120 analog-to-digital converter with I2C interface",
-  "keywords": "adc, audio, i2c, ti, tlv320adc, tlv320adc3120",
-  "repository":
-  {
-    "type": "git",
-    "url": "https://github.com/Kageni-wq/TLV320ADC.git"
+  "description": "A library for handling AT commands on ESP32",
+  "repository": {
+      "type": "git",
+    "url": "https://github.com/Kageni-wq/ATCommands.git"
   },
   "authors":
   [
@@ -18,10 +16,10 @@
     }
   ],
   "license": "MIT",
-  "homepage": "https://github.com/Kageni-wq/TLV320ADC",
+  "frameworks": ["arduino", "esp-idf"],
+  "platforms": ["espressif32"],
+  "homepage": "https://github.com/Kageni-wq/ATCommands",
   "dependencies": {
     "Wire": "^1.0.0"
-  },
-  "frameworks": "arduino",
-  "platforms": "*"
+  }
 }
